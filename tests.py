@@ -1,5 +1,4 @@
 """Tests that run once"""
-
 import io
 import os
 import sys
@@ -7,12 +6,29 @@ import imp
 import shutil
 import tempfile
 import subprocess
+import contextlib
+
+try:
+    from StringIO import StringIO
+except ImportError:
+    from io import StringIO  # Python 3
 
 from nose.tools import (
     assert_raises,
 )
 
 PYTHON = sys.version_info[0]  # e.g. 2 or 3
+
+
+@contextlib.contextmanager
+def captured_output():
+    new_out, new_err = StringIO(), StringIO()
+    old_out, old_err = sys.stdout, sys.stderr
+    try:
+        sys.stdout, sys.stderr = new_out, new_err
+        yield sys.stdout, sys.stderr
+    finally:
+        sys.stdout, sys.stderr = old_out, old_err
 
 
 self = sys.modules[__name__]
@@ -39,8 +55,8 @@ def setup():
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>235</width>
-    <height>149</height>
+    <width>507</width>
+    <height>394</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -50,10 +66,37 @@ def setup():
    <item row="0" column="0">
     <widget class="QLineEdit" name="lineEdit"/>
    </item>
+   <item row="1" column="0">
+    <widget class="QLabel" name="label">
+     <property name="text">
+      <string>TextLabel</string>
+     </property>
+    </widget>
+   </item>
+   <item row="2" column="0">
+    <widget class="QLineEdit" name="lineEdit_2"/>
+   </item>
   </layout>
  </widget>
  <resources/>
- <connections/>
+ <connections>
+  <connection>
+   <sender>lineEdit</sender>
+   <signal>textChanged(QString)</signal>
+   <receiver>label</receiver>
+   <slot>setText(QString)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>228</x>
+     <y>23</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>37</x>
+     <y>197</y>
+    </hint>
+   </hints>
+  </connection>
+ </connections>
 </ui>
 """)
 
@@ -88,10 +131,77 @@ def test_load_ui_returntype():
     """load_ui returns an instance of QObject"""
 
     import sys
-    from Qt import QtWidgets, QtCore, load_ui
+    from Qt import QtWidgets, QtCore, QtCompat
     app = QtWidgets.QApplication(sys.argv)
-    obj = load_ui(self.ui_qwidget)
+    obj = QtCompat.loadUi(self.ui_qwidget)
     assert isinstance(obj, QtCore.QObject)
+    app.exit()
+
+
+def test_load_ui_baseinstance():
+    """Tests to see if the baseinstance loading loads widgets on properly"""
+    import sys
+    from Qt import QtWidgets, QtCompat
+    app = QtWidgets.QApplication(sys.argv)
+    win = QtWidgets.QWidget()
+    QtCompat.loadUi(self.ui_qwidget, win)
+    assert hasattr(win, 'lineEdit'), "loadUi could not load instance to win"
+    app.exit()
+
+
+def test_load_ui_signals():
+    """Tests to see if the baseinstance loading loads widgets on properly"""
+    import sys
+    from Qt import QtWidgets, QtCompat
+    app = QtWidgets.QApplication(sys.argv)
+    win = QtWidgets.QWidget()
+    QtCompat.loadUi(self.ui_qwidget, win)
+
+    win.lineEdit.setText('Hello')
+    assert str(win.label.text()) == 'Hello', "lineEdit signal did not fire"
+
+    app.exit()
+
+
+def test_load_ui_invalidpath():
+    """Tests to see if loadUi successfully fails on invalid paths"""
+    import sys
+    from Qt import QtWidgets, QtCompat
+    app = QtWidgets.QApplication(sys.argv)
+    assert_raises(IOError, QtCompat.loadUi, 'made/up/path')
+    app.exit()
+
+
+def test_load_ui_invalidxml():
+    """Tests to see if loadUi successfully fails on invalid ui files"""
+    import sys
+    invalid_xml = os.path.join(self.tempdir, "invalid.ui")
+    with io.open(invalid_xml, "w", encoding="utf-8") as f:
+        f.write(u"""
+        <?xml version="1.0" encoding="UTF-8"?>
+        <ui version="4.0" garbage
+        </ui>
+        """)
+
+    from xml.etree import ElementTree
+    from Qt import QtWidgets, QtCompat
+    app = QtWidgets.QApplication(sys.argv)
+    assert_raises(ElementTree.ParseError, QtCompat.loadUi, invalid_xml)
+    app.exit()
+
+
+def test_load_ui_overwrite_fails():
+    """PyQt4/5 loadUi functiion will fail if the widget has a preexisting
+    layout. This tests that our custom implementation for PySide does the same
+    """
+    import sys
+    from Qt import QtWidgets, QtCompat
+    app = QtWidgets.QApplication(sys.argv)
+    win = QtWidgets.QWidget()
+    layout = QtWidgets.QVBoxLayout(win)
+    win.lineEdit = QtWidgets.QPushButton('Test')
+    layout.addWidget(win.lineEdit)
+    assert_raises(RuntimeError, QtCompat.loadUi, self.ui_qwidget, win)
     app.exit()
 
 
@@ -138,7 +248,7 @@ def test_vendoring():
     assert subprocess.call(
         [sys.executable, "-c", "import myproject"],
         cwd=self.tempdir,
-        stdout=subprocess.PIPE,    # With nose process isolation, buffer can
+        stdout=subprocess.PIPE,  # With nose process isolation, buffer can
         stderr=subprocess.STDOUT,  # easily get full and throw an error.
     ) == 0
 
@@ -174,7 +284,7 @@ class Ui_uic(object):
 """.split("\n")
 
     after = """\
-from Qt import QtCore, QtGui, QtWidgets
+from Qt import QtCompat, QtCore, QtGui, QtWidgets
 
 class Ui_uic(object):
     def setupUi(self, uic):
@@ -182,11 +292,11 @@ class Ui_uic(object):
 
     def retranslateUi(self, uic):
         self.pushButton_2.setText(
-            Qt.QtCompat.translate("uic", "NOT Ok", None, -1))
+            QtCompat.translate("uic", "NOT Ok", None, -1))
 """.split("\n")
 
-    import Qt
-    assert Qt.convert(before) == after, after
+    from Qt import QtCompat
+    assert QtCompat._convert(before) == after, after
 
 
 def test_convert_idempotency():
@@ -204,7 +314,7 @@ class Ui_uic(object):
 """
 
     after = """\
-from Qt import QtCore, QtGui, QtWidgets
+from Qt import QtCompat, QtCore, QtGui, QtWidgets
 
 class Ui_uic(object):
     def setupUi(self, uic):
@@ -212,7 +322,7 @@ class Ui_uic(object):
 
     def retranslateUi(self, uic):
         self.pushButton_2.setText(
-            Qt.QtCompat.translate("uic", "NOT Ok", None, -1))
+            QtCompat.translate("uic", "NOT Ok", None, -1))
 """
 
     fname = os.path.join(self.tempdir, "idempotency.py")
@@ -222,12 +332,12 @@ class Ui_uic(object):
     from Qt import QtCompat
 
     os.chdir(self.tempdir)
-    QtCompat.cli(args=["--convert", "idempotency.py"])
+    QtCompat._cli(args=["--convert", "idempotency.py"])
 
     with open(fname) as f:
         assert f.read() == after
 
-    QtCompat.cli(args=["--convert", "idempotency.py"])
+    QtCompat._cli(args=["--convert", "idempotency.py"])
 
     with open(fname) as f:
         assert f.read() == after
@@ -243,62 +353,11 @@ def test_convert_backup():
     from Qt import QtCompat
 
     os.chdir(self.tempdir)
-    QtCompat.cli(args=["--convert", "idempotency.py"])
+    QtCompat._cli(args=["--convert", "idempotency.py"])
 
     assert os.path.exists(
         os.path.join(self.tempdir, "%s_backup%s" % os.path.splitext(fname))
     )
-
-
-def test_meta_add():
-    """Qt._add() appends to __added__"""
-    from Qt import QtCompat
-
-    module = imp.new_module("QtMock")
-
-    QtCompat._add(module, "MyAttr", None)
-
-    assert "MyAttr" in QtCompat.__added__, QtCompat.__added__
-    assert "MyAttr" not in QtCompat.__remapped__
-    assert "MyAttr" not in QtCompat.__modified__
-
-
-def test_meta_remap():
-    """Qt._remap() appends to __modified__"""
-    from Qt import QtCompat
-
-    module = imp.new_module("QtMock")
-
-    QtCompat._remap(module, "MyAttr", None)
-
-    assert "MyAttr" not in QtCompat.__added__, QtCompat.__added__
-    assert "MyAttr" in QtCompat.__remapped__
-    assert "MyAttr" not in QtCompat.__modified__
-
-
-def test_meta_remap_existing():
-    """Qt._remap() of existing member throws an exception"""
-    from Qt import QtCompat
-
-    module = imp.new_module("QtMock")
-    module.MyAttr = None
-
-    assert_raises(AttributeError, QtCompat._remap, module, "MyAttr", None)
-
-
-def test_meta_force_remap_existing():
-    """Unsafe Qt._remap() of existing member adds to modified"""
-    from Qt import QtCompat
-
-    module = imp.new_module("QtMock")
-    module.MyAttr = 123
-
-    QtCompat._remap(module, "MyAttr", None, safe=False)
-
-    assert "MyAttr" in QtCompat.__remapped__, QtCompat.__remapped__
-    assert "MyAttr" not in QtCompat.__added__
-    assert "MyAttr" in QtCompat.__modified__
-    assert module.MyAttr is None, module.MyAttr
 
 
 def test_import_from_qtwidgets():
@@ -325,76 +384,142 @@ def test_translate_arguments():
     equivalent with an interface like the one found in PySide2.
 
     Reference: https://doc.qt.io/qt-5/qcoreapplication.html#translate
+
     """
 
     import Qt
 
     # This will run on each binding
     result = Qt.QtCompat.translate("CustomDialog",  # context
-                                   "Status",        # sourceText
-                                   None,            # disambiguation
-                                   -1)              # n
+                                   "Status",  # sourceText
+                                   None,  # disambiguation
+                                   -1)  # n
     assert result == u'Status', result
 
 
 def test_binding_and_qt_version():
-    """QtCompat's __binding_version__ and __qt_version__ populated"""
+    """Qt's __binding_version__ and __qt_version__ populated"""
 
-    from Qt import QtCompat
+    import Qt
 
-    assert QtCompat.__binding_version__ != "0.0.0", ("Binding version was not "
-                                                     "populated")
-    assert QtCompat.__qt_version__ != "0.0.0", ("Qt version was not populated")
+    assert Qt.__binding_version__ != "0.0.0", ("Binding version was not "
+                                               "populated")
+    assert Qt.__qt_version__ != "0.0.0", ("Qt version was not populated")
+
+
+def test_binding_states():
+    """Tests to see if the Qt binding enum states are set properly"""
+    import Qt
+    assert Qt.IsPySide == binding("PySide")
+    assert Qt.IsPySide2 == binding("PySide2")
+    assert Qt.IsPyQt5 == binding("PyQt5")
+    assert Qt.IsPyQt4 == binding("PyQt4")
+
+
+def test_cli():
+    """Qt.py is available from the command-line"""
+    env = os.environ.copy()
+    env.pop("QT_VERBOSE")  # Do not include debug messages
+
+    popen = subprocess.Popen(
+        [sys.executable, "Qt.py", "--help"],
+        stdout=subprocess.PIPE,
+        env=env
+    )
+
+    out, err = popen.communicate()
+    assert out.startswith(b"usage: Qt.py"), "\n%s" % out
 
 
 if binding("PyQt4"):
     def test_preferred_pyqt4():
         """QT_PREFERRED_BINDING = PyQt4 properly forces the binding"""
         import Qt
-        assert Qt.__name__ == "PyQt4", ("PyQt4 should have been picked, "
-                                        "instead got %s" % Qt)
+        assert Qt.__binding__ == "PyQt4", (
+            "PyQt4 should have been picked, "
+            "instead got %s" % Qt.__binding__)
 
     def test_sip_api_qtpy():
         """Preferred binding PyQt4 should have sip version 2"""
 
         __import__("Qt")  # Bypass linter warning
         import sip
-        assert sip.getapi("QString") == 2, ("PyQt4 API version should be 2, "
-                                            "instead is %s"
-                                            % sip.getapi("QString"))
+        assert sip.getapi("QString") == 2, (
+            "PyQt4 API version should be 2, "
+            "instead is %s" % sip.getapi("QString"))
 
     if PYTHON == 2:
         def test_sip_api_already_set():
-            """Raise ImportError if sip API v1 was already set"""
-
+            """Raise ImportError with sip was set to 1 with no hint, default"""
             __import__("PyQt4.QtCore")  # Bypass linter warning
             import sip
             sip.setapi("QString", 1)
             assert_raises(ImportError, __import__, "Qt")
+
+        # A sip API hint of any kind bypasses ImportError
+        # on account of it being merely a hint.
+        def test_sip_api_1_1():
+            """sip=1, hint=1 == OK"""
+            import sip
+            sip.setapi("QString", 1)
+            os.environ["QT_SIP_API_HINT"] = "1"
+            __import__("Qt")  # Bypass linter warning
+
+        def test_sip_api_2_1():
+            """sip=2, hint=1 == WARNING"""
+            import sip
+            sip.setapi("QString", 2)
+            os.environ["QT_SIP_API_HINT"] = "1"
+
+            with captured_output() as out:
+                __import__("Qt")  # Bypass linter warning
+                stdout, stderr = out
+                assert stderr.getvalue().startswith("Warning:")
+
+        def test_sip_api_1_2():
+            """sip=1, hint=2 == WARNING"""
+            import sip
+            sip.setapi("QString", 1)
+            os.environ["QT_SIP_API_HINT"] = "2"
+
+            with captured_output() as out:
+                __import__("Qt")  # Bypass linter warning
+                stdout, stderr = out
+                assert stderr.getvalue().startswith("Warning:")
+
+        def test_sip_api_2_2():
+            """sip=2, hint=2 == OK"""
+            import sip
+            sip.setapi("QString", 2)
+            os.environ["QT_SIP_API_HINT"] = "2"
+            __import__("Qt")  # Bypass linter warning
 
 
 if binding("PyQt5"):
     def test_preferred_pyqt5():
         """QT_PREFERRED_BINDING = PyQt5 properly forces the binding"""
         import Qt
-        assert Qt.__name__ == "PyQt5", ("PyQt5 should have been picked, "
-                                        "instead got %s" % Qt)
+        assert Qt.__binding__ == "PyQt5", (
+            "PyQt5 should have been picked, "
+            "instead got %s" % Qt.__binding__)
 
 
 if binding("PySide"):
     def test_preferred_pyside():
         """QT_PREFERRED_BINDING = PySide properly forces the binding"""
         import Qt
-        assert Qt.__name__ == "PySide", ("PySide should have been picked, "
-                                         "instead got %s" % Qt)
+        assert Qt.__binding__ == "PySide", (
+            "PySide should have been picked, "
+            "instead got %s" % Qt.__binding__)
 
 
 if binding("PySide2"):
     def test_preferred_pyside2():
         """QT_PREFERRED_BINDING = PySide2 properly forces the binding"""
         import Qt
-        assert Qt.__name__ == "PySide2", ("PySide2 should have been picked, "
-                                          "instead got %s" % Qt)
+        assert Qt.__binding__ == "PySide2", (
+            "PySide2 should have been picked, "
+            "instead got %s" % Qt.__binding__)
 
     def test_coexistence():
         """Qt.py may be use alongside the actual binding"""
@@ -418,5 +543,6 @@ if binding("PySide") or binding("PySide2"):
             ["PySide", "PySide2"])
 
         import Qt
-        assert Qt.__name__ == "PySide", ("PySide should have been picked, "
-                                         "instead got %s" % Qt)
+        assert Qt.__binding__ == "PySide", (
+            "PySide should have been picked, "
+            "instead got %s" % Qt.__binding__)

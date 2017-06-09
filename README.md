@@ -2,21 +2,47 @@
 
 ### Qt.py
 
-Qt.py enables you to write software that dynamically chooses the most desireable bindings based on what's available, including PySide2, PyQt5, PySide and PyQt4; in that (configurable) order (see below).
+Qt.py enables you to write software that runs on any of the 4 supported bindings - PySide2, PyQt5, PySide and PyQt4.
 
-**Guides**
+<br>
+
+##### News
+
+| Date     | Version   | Event
+|:---------|:----------|:----------
+| Mar 2017 | [1.0.0][] | Increased safety, **backwards incompatible**
+| Sep 2016 | [0.6.9][] | Stable release
+| Sep 2016 | [0.5.0][] | Alpha release of `--convert`
+| Jun 2016 | [0.2.6][] | First release of Qt.py
+
+- [More details](https://github.com/mottosso/Qt.py/releases).
+
+[0.2.6]: https://github.com/mottosso/Qt.py/releases/tag/0.2.6
+[0.5.0]: https://github.com/mottosso/Qt.py/releases/tag/0.5.0
+[0.6.9]: https://github.com/mottosso/Qt.py/releases/tag/0.6.9
+[1.0.0]: https://github.com/mottosso/Qt.py/releases/tag/1.0.0
+
+##### Guides
 
 - [Developing with Qt.py](https://fredrikaverpil.github.io/2016/07/25/developing-with-qt-py/)
 - [Dealing with Maya 2017 and PySide2](https://fredrikaverpil.github.io/2016/07/25/dealing-with-maya-2017-and-pyside2/)
+- [Vendoring Qt.py](https://fredrikaverpil.github.io/2017/05/04/vendoring-qt-py/)
+- [Udemy Course](https://www.udemy.com/python-for-maya/learn/v4/t/lecture/6027394)
 
-**Mentions**
-- [Qt.py: A portable wrapper for Qt](https://www.udemy.com/python-for-maya/learn/v4/t/lecture/6027394) (Udemy course, registration required)
+##### Table of contents
 
-**Table of contents**
-
+- [Project goals](#project-goals)
 - [Install](#install)
 - [Usage](#usage)
 - [Documentation](#documentation)
+  - [Environment Variables](#environment-variables)
+  - [Subset](#subset)
+  - [Branch binding-specific code](#branch-binding-specific-code)
+  - [Override preferred choice](#override-preferred-choice)
+  - [QtSiteConfig.py](#qtsiteconfigpy)
+  - [Compile Qt Designer files](#compile-qt-designer-files)
+  - [Loading Qt Designer files](#loading-qt-designer-files)
+  - [sip API v2](#sip-api-v2)
 - [Rules](#rules)
 - [How it works](#how-it-works)
 - [Known problems](#known-problems)
@@ -31,15 +57,15 @@ Qt.py enables you to write software that dynamically chooses the most desireable
 
 ### Project goals
 
-Write for PySide2, run in any binding.
+Write once, run in any binding.
 
 Qt.py was born in the film and visual effects industry to address the growing need for software capable of running with more than one flavor of the Qt bindings for Python - PySide, PySide2, PyQt4 and PyQt5.
 
 | Goal                                 | Description
 |:-------------------------------------|:---------------
-| *Support co-existence* | Qt.py should not affect other bindings running in same interpreter session.
-| *Build for one, run with all* | Code written with Qt.py should run on any binding.
-| *Explicit is better than implicit* | Differences between bindings should be visible to you.
+| *Support co-existence*               | Qt.py should not affect other bindings running in same interpreter session.
+| *Build for one, run with all*        | Code written with Qt.py should run on any binding.
+| *Explicit is better than implicit*   | Differences between bindings should be visible to you.
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) for more details.
 
@@ -55,7 +81,7 @@ Qt.py is a single file and can either be [copy/pasted](https://raw.githubusercon
 $ pip install Qt.py
 ```
 
-- Pro tip: Supports vendoring
+- Pro tip: Supports [vendoring](https://fredrikaverpil.github.io/2017/05/04/vendoring-qt-py/)
 
 <br>
 <br>
@@ -85,21 +111,30 @@ app.exec_()
 
 ### Documentation
 
-All members of `Qt` stem directly from those available via PySide2, along with these additional members, accessible via `Qt.QtCompat`.
+All members of `Qt` stem directly from those available via PySide2, along with these additional members.
 
 | Attribute               | Returns     | Description
 |:------------------------|:------------|:------------
+| `__version__`           | `str`       | Version of this project
 | `__binding__`           | `str`       | A string reference to binding currently in use
 | `__qt_version__`        | `str`       | Reference to version of Qt, such as Qt 5.6.1
 | `__binding_version__`   | `str`       | Reference to version of binding, such as PySide 1.2.6
-| `__wrapper_version__`   | `str`       | Version of this project
-| `__added__`             | `list(str)` | All unique members of Qt.py
-| `__remapped__`          | `list(str)` | Members copied from elsewhere, such as QtGui -> QtWidgets
-| `__modified__`          | `list(str)` | Existing members modified in some way
-| `__shim__`              | `module`    | Reference to original Qt.py Python module
-| `load_ui(fname=str)`    | `QObject`   | Minimal wrapper of PyQt4.loadUi and PySide equivalent
-| `translate(...)`        | `function`  | Compatibility wrapper around [QCoreApplication.translate][]
-| `setSectionResizeMode()`| `method`    | Compatibility wrapper around [QAbstractItemView.setSectionResizeMode][]
+
+**Example**
+
+```python
+>>> from Qt import __binding__
+>>> __binding__
+'PyQt5'
+```
+
+Qt.py also provides compatibility wrappers for critical functionality that differs across bindings, these can be found in the added `QtCompat` submodule.
+
+| Attribute                                 | Returns     | Description
+|:------------------------------------------|:------------|:------------
+| `loadUi(uifile=str, baseinstance=QWidget)` | `QObject`   | Minimal wrapper of PyQt4.loadUi and PySide equivalent
+| `translate(...)`                          | `function`  | Compatibility wrapper around [QCoreApplication.translate][]
+| `setSectionResizeMode()`                  | `method`    | Compatibility wrapper around [QAbstractItemView.setSectionResizeMode][]
 
 [QCoreApplication.translate]: https://doc.qt.io/qt-5/qcoreapplication.html#translate
 [QAbstractItemView.setSectionResizeMode]: https://doc.qt.io/qt-5/qheaderview.html#setSectionResizeMode
@@ -108,9 +143,28 @@ All members of `Qt` stem directly from those available via PySide2, along with t
 
 ```python
 >>> from Qt import QtCompat
->>> QtCompat.__binding__
-'PyQt5'
+>>> QtCompat.setSectionResizeMode
 ```
+
+<br>
+
+##### Environment Variables
+
+These are the publicly facing environment variables that in one way or another affect the way Qt.py is run.
+
+| Variable             | Type  | Description
+|:---------------------|:------|:----------
+| QT_PREFERRED_BINDING | str   | Override order and content of binding to try.
+| QT_VERBOSE           | bool  | Be a little more chatty about what's going on with Qt.py
+| QT_SIP_API_HINT      | int   | Sets the preferred SIP api version that will be attempted to set.
+
+<br>
+
+##### Subset
+
+Members of Qt.py is a subset of PySide2. Which means for a member to be made accessible via Qt.py, it will need to (1) be accessible via PySide2 and (2) each of the other supported bindings. This excludes large portions of the Qt framework, including the newly added QtQml and QtQuick modules but guarantees that anything you develop with Qt.py will work identically on any binding - PySide, PySide2, PyQt4 and PyQt5.
+
+The version of PySide2 used as reference is the one specified on [VFX Platform](http://www.vfxplatform.com/). Currently version is 2.0.0.
 
 <br>
 
@@ -119,7 +173,7 @@ All members of `Qt` stem directly from those available via PySide2, along with t
 Some bindings offer features not available in others, you can use `__binding__` to capture those.
 
 ```python
-if "PySide" in QtCompat.__binding__:
+if "PySide" in __binding__:
   do_pyside_stuff()
 ```
 
@@ -132,7 +186,7 @@ If your system has multiple choices where one or more is preferred, you can over
 ```bash
 $ set QT_PREFERRED_BINDING=PyQt5  # Windows
 $ export QT_PREFERRED_BINDING=PyQt5  # Unix/OSX
-$ python -c "from Qt import QtCompat;print(QtCompat.__binding__)"
+$ python -c "import Qt;print(Qt.__binding__)"
 PyQt5
 ```
 
@@ -144,6 +198,45 @@ $ export QT_PREFERRED_BINDING=PyQt:PySide
 ```
 
 Using the OS path separator (`os.pathsep`) which is `:` on Unix systems and `;` on Windows.
+
+<br>
+
+##### QtSiteConfig.py
+
+Add or remove members from Qt.py at run-time.
+
+-  [Examples](/examples/QtSiteConfig)
+
+<br>
+
+If you need to expose a module that isn't included in Qt.py by default or wish to remove something from being exposed in Qt.py you can do so by creating a `QtSiteConfig.py` module and making it available to Python.
+
+1. Create a new file `QtSiteConfig.py`
+2. Implement `update_members`
+3. Expose to Python
+
+```python
+# QtSiteConfig.py
+def update_members(members):
+	"""Called by Qt.py at run-time to modify the modules it makes available.
+
+    Arguments:
+        members (dict): The members considered by Qt.py
+
+    """
+
+    members.pop("QtCore")
+```
+
+Finally, expose the module to Python.
+
+```bash
+$ set PYTHONPATH=/path/to
+$ python -c "import Qt.QtCore"
+ImportError: No module named Qt.QtCore
+```
+
+> Linux and MacOS users, replace `set` with `export`
 
 <br>
 
@@ -167,21 +260,41 @@ Now you may use the file as you normally would, with Qt.py
 
 <br>
 
-##### Load Qt Designer files
+##### Loading Qt Designer files
 
-The `uic.loadUi` function of PyQt4 and PyQt5 as well as the `QtUiTools.QUiLoader().load` function of PySide/PySide2 are mapped to a convenience function `load_ui`.
+The `uic.loadUi` function of PyQt4 and PyQt5 as well as the `QtUiTools.QUiLoader().load` function of PySide/PySide2 are mapped to a convenience function `loadUi`.
 
 ```python
 import sys
 from Qt import QtCompat
 
 app = QtWidgets.QApplication(sys.argv)
-ui = QtCompat.load_ui(fname="my.ui")
+ui = QtCompat.loadUi(uifile="my.ui")
 ui.show()
 app.exec_()
 ```
+For `PyQt` bindings it uses their native implementation, whereas for `PySide` bindings it uses our custom implementation borrowed from the [qtpy](https://github.com/spyder-ide/qtpy) project.
 
-Please note, `load_ui` has only one argument, whereas the PyQt and PySide equivalent has more. See [here](https://github.com/mottosso/Qt.py/pull/81) for details - in a nutshell, those arguments differ between PyQt and PySide in incompatible ways.
+`loadUi` has two arguments as opposed to the multiple that PyQt ships with. See [here](https://github.com/mottosso/Qt.py/pull/81) for details - in a nutshell, those arguments differ between PyQt and PySide in incompatible ways.
+The second argument is `baseinstance` which allows a ui to be dynamically loaded onto an existing QWidget instance.
+
+```python
+QtCompat.loadUi(uifile="my.ui", baseinstance=QtWidgets.QWidget)
+```
+
+`uifile` is the string path to the ui file to load.
+
+If `baseinstance` is `None`, the a new instance of the top-level
+widget will be created. Otherwise, the user interface is created within
+the given `baseinstance`. In this case `baseinstance` must be an
+instance of the top-level widget class in the UI file to load, or a
+subclass thereof. In other words, if you've created a `QMainWindow`
+interface in the designer, `baseinstance` must be a `QMainWindow`
+or a subclass thereof, too. You cannot load a `QMainWindow` UI file
+with a plain `QWidget` as `baseinstance`.
+
+`loadUi` returns `baseinstance`, if `baseinstance` is provided.
+Otherwise it will return the newly created instance of the user interface.
 
 <br>
 
@@ -219,56 +332,9 @@ PyQt5.Slot = PyQt5.pyqtSlot
 PySide2.QtCore.QStringListModel = PySide2.QtGui.QStringListModel
 ```
 
-**Portability**
-
-Qt.py does not hide members from the original binding. This can be problematic if, for example, you accidentally use a member that only exists PyQt5 and later try running your software with a different binding.
-
-```python
-from Qt import QtCore
-
-# Incompatible with PySide
-signal = QtCore.pyqtSignal()
-```
-
-But it enables use of Qt.py as a helper library, in conjunction with an existing binding, simplifying the transition of an existing project from a particular binding.
-
-```python
-# This is ok
-from Qt import QtCore
-from PyQt4 import QtGui
-```
-
 **Caveats**
 
 There are cases where Qt.py is not handling incompatibility issues. Please see [`CAVEATS.md`](CAVEATS.md) for more information.
-
-<br>
-<br>
-<br>
-
-### How it works
-
-Once you import Qt.py, Qt.py replaces itself with the most desirable binding on your platform, or throws an `ImportError` if none are available.
-
-```python
->>> import Qt
->>> print(Qt)
-<module 'PyQt5' from 'C:\Python27\lib\site-packages\PyQt5\__init__.pyc'>
-```
-
-Here's an example of how this works.
-
-**Qt.py**
-
-```python
-import sys
-import PyQt5
-
-# Replace myself PyQt5
-sys.modules["Qt"] = PyQt5
-```
-
-Once imported, it is as though your application was importing whichever binding was chosen and Qt.py never existed.
 
 <br>
 <br>
@@ -300,6 +366,11 @@ Send us a pull-request with your studio here.
 - [Industriromantik](http://www.industriromantik.se/)
 - [Psyop](http://www.psyop.com/)
 - [ftrack](https://www.ftrack.com/)
+- [Fido](http://fido.se/)
+- [Bläck](http://www.blackstudios.se/)
+- [CGRU](http://cgru.info/)
+- [MPC](http://www.moving-picture.com)
+- [Rising Sun Pictures](https://rsp.com.au)
 
 Presented at Siggraph 2016, BOF!
 
@@ -320,6 +391,7 @@ Send us a pull-request with your project here.
 - [cmt](https://github.com/chadmv/cmt)
 - [PythonForMayaSamples](https://github.com/dgovil/PythonForMayaSamples)
 - [Kraken](https://github.com/fabric-engine/Kraken)
+- [AFANASY](http://cgru.info/afanasy/afanasy)
 
 <br>
 <br>
@@ -372,9 +444,24 @@ Tests that are written at module level are run four times - once per binding - w
 
 ```python
 if binding("PyQt4"):
-	def test_something_related_to_pyqt4():
-		pass
+    def test_something_related_to_pyqt4():
+        pass
 ```
+
+**Code convention**
+
+Below are some of the conventions that used throughout the Qt.py module and tests.
+
+- **Etiquette: PEP8**
+    - All code is written in PEP8. It is recommended you use a linter as you work, flake8 and pylinter are both good options. Anaconda if using Sublime is another good option.
+- **Etiquette: Double quotes**
+    - " = yes, ' = no.
+- **Etiquette: Napoleon docstrings**
+    - Any docstrings are made in Google Napoleon format. See [Napoleon](https://sphinxcontrib-napoleon.readthedocs.io/en/latest/example_google.html) for details.
+- **Etiquette: Semantic Versioning**
+    - This project follows [semantic versioning](http://semver.org).
+- **Etiquette: Underscore means private**
+    - Anything prefixed with an underscore means that it is internal to Qt.py and not for public consumption.
 
 **Running tests**
 
@@ -388,9 +475,13 @@ cd Qt.py
 docker build -t mottosso/qt.py27 -f Dockerfile-py2.7 .
 docker build -t mottosso/qt.py35 -f Dockerfile-py3.5 .
 
-# Run nosetests
+# Run nosetests (Linux/OSX)
 docker run --rm -v $(pwd):/Qt.py mottosso/qt.py27
 docker run --rm -v $(pwd):/Qt.py mottosso/qt.py35
+
+# Run nosetests (Windows)
+docker run --rm -v %CD%:/Qt.py mottosso/qt.py27
+docker run --rm -v %CD%:/Qt.py mottosso/qt.py35
 
 # Doctest: test_caveats.test_1_qtgui_qabstractitemmodel_createindex ... ok
 # Doctest: test_caveats.test_2_qtgui_qabstractitemmodel_createindex ... ok
